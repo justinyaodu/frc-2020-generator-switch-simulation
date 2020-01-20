@@ -17,8 +17,9 @@ public class SwitchSimulation
 	public final ObservableList<Double> TOLERANCES_MINUS = new ObservableListWrapper<>(new ArrayList<>());
 	public final ObservableList<Double> TOLERANCES_PLUS = new ObservableListWrapper<>(new ArrayList<>());
 	public DoubleBinding NET_TORQUE;
-
-	public final DoubleBinding THEORETICAL_ANGLE;
+	public DoubleBinding COM_X = new SimpleDoubleProperty(0).add(0);
+	public DoubleBinding COM_Y = new SimpleDoubleProperty(0).add(0);
+	private DoubleBinding TOTAL_MASS = new SimpleDoubleProperty(0).add(0);
 
 	public final BooleanBinding IS_LEVEL = new BooleanBinding()
 	{
@@ -42,62 +43,40 @@ public class SwitchSimulation
 	{
 		MASSES = new ArrayList<>();
 		PointMassOnSwitch switchMass = new PointMassOnSwitch(0, -Constants.SWITCH_COM_PIVOT_DISTANCE, Constants.SWITCH_WEIGHT, SWITCH_ANGLE);
-		MASSES.add(switchMass);
+		addMass(switchMass);
 
 		NET_TORQUE = switchMass.TORQUE;
-
-		DoubleBinding numerator = new SimpleDoubleProperty(0).add(0);
-		DoubleBinding denominator = switchMass.MASS.multiply(Constants.SWITCH_COM_PIVOT_DISTANCE);
 
 		for (int i = 0; i < 3; i++)
 		{
 			PointMassOnSwitch robot = new PointMassOnSwitch(0, -Constants.SWITCH_RUNG_PIVOT_DISTANCE, 0, SWITCH_ANGLE);
-			MASSES.add(robot);
+			addMass(robot);
 
 			// recalculate state whenever robot position or mass are changed
 			robot.SWITCH_RELATIVE_POSITION.X.addListener(observable -> recalculate());
 			robot.SWITCH_RELATIVE_POSITION.Y.addListener(observable -> recalculate());
 			robot.MASS.addListener(observable -> recalculate());
 
-			numerator = numerator.add(robot.MASS.multiply(robot.SWITCH_RELATIVE_POSITION.X).multiply(-1));
-			denominator = denominator.subtract(robot.MASS.multiply(Constants.SWITCH_RUNG_PIVOT_DISTANCE));
-
 			NET_TORQUE = NET_TORQUE.add(robot.TORQUE);
 		}
 
-		DoubleBinding quotient = numerator.divide(denominator);
+		COM_X = COM_X.divide(TOTAL_MASS);
+		COM_Y = COM_Y.divide(TOTAL_MASS);
+	}
 
-		THEORETICAL_ANGLE = new DoubleBinding() {
-			{
-				super.bind(quotient);
-			}
-
-			@Override
-			protected double computeValue() {
-				return Math.atan(quotient.get());
-			}
-		};
+	private void addMass(PointMassOnSwitch pointMass)
+	{
+		MASSES.add(pointMass);
+		COM_X = COM_X.add(pointMass.MASS.multiply(pointMass.POSITION.X));
+		COM_Y = COM_Y.add(pointMass.MASS.multiply(pointMass.POSITION.Y));
+		TOTAL_MASS = TOTAL_MASS.add(pointMass.MASS);
 	}
 
 	private void findEquilibrium()
 	{
-		double min = -Constants.SWITCH_MAX_ANGLE;
-		double max = Constants.SWITCH_MAX_ANGLE;
-		SWITCH_ANGLE.set(0);
-
-		while (max - min > SOLVE_PRECISION.get())
-		{
-			if (NET_TORQUE.get() < 0)
-			{
-				min = SWITCH_ANGLE.get();
-			}
-			else
-			{
-				max = SWITCH_ANGLE.get();
-			}
-
-			SWITCH_ANGLE.set((min + max) / 2);
-		}
+		double angle = Math.atan2(COM_X.get(), COM_Y.get());
+		angle = Math.max(-Constants.SWITCH_MAX_ANGLE, Math.min(Constants.SWITCH_MAX_ANGLE, angle));
+		SWITCH_ANGLE.set(angle);
 	}
 
 	private void recalculate()

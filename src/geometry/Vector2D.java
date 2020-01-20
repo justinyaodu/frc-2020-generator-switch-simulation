@@ -25,14 +25,4 @@ public class Vector2D
 		double yPrime = -a.X.get() * Math.sin(theta) + a.Y.get() * Math.cos(theta);
 		return new Vector2D(xPrime, yPrime);
 	}
-
-	public static Vector2D scale(Vector2D a, double scalar)
-	{
-		return new Vector2D(a.X.get() * scalar, a.Y.get() * scalar);
-	}
-
-	public static double magnitude(Vector2D a)
-	{
-		return Math.sqrt(a.X.get() * a.X.get() + a.Y.get() * a.Y.get());
-	}
 }

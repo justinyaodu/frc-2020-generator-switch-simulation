@@ -102,6 +102,12 @@ public class GUI extends Application
 		// add switch text
 		pane.getChildren().add(buildSwitchText());
 
+		// add COM
+		Circle com = new Circle(5, Color.BLACK);
+		bindNodeX(com.layoutXProperty(), simulation.COM_X);
+		bindNodeY(com.layoutYProperty(), simulation.COM_Y);
+		pane.getChildren().add(com);
+
 		ScrollPane scrollPane = new ScrollPane(pane);
 		scrollPane.setPannable(true);
 
@@ -251,7 +257,6 @@ public class GUI extends Application
 		bindNodePosition(text, new PointMassOnSwitch(0, 3, 0, simulation.SWITCH_ANGLE).POSITION);
 
 		StringExpression angleString = Bindings.format("%.1f°", simulation.SWITCH_ANGLE.multiply(180 / Math.PI));
-		StringExpression angleStringTheoretical = Bindings.format("%.1f°", simulation.THEORETICAL_ANGLE.multiply(180 / Math.PI));
 		StringExpression levelString = new StringBinding() {
 			{
 				super.bind(simulation.IS_LEVEL);
@@ -263,7 +268,7 @@ public class GUI extends Application
 			}
 		};
 
-		text.textProperty().bind(Bindings.format("%s (%s)\n%.1f in-lb\n%s", angleString, levelString, simulation.NET_TORQUE, angleStringTheoretical));
+		text.textProperty().bind(Bindings.format("%s (%s)\n%.1f in-lb", angleString, levelString, simulation.NET_TORQUE));
 
 		return text;
 	}

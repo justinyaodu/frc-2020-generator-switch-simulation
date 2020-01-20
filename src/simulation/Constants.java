@@ -9,7 +9,7 @@ public class Constants
 	public static double SWITCH_WEIGHT = 93;
 	public static double SWITCH_BALANCED_ANGLE = 8 * Math.PI / 180;
 	public static double SWITCH_MAX_ANGLE = 14.5 * Math.PI / 180;
-	public static double SWITCH_HANDLE_LENGTH = 114; // actually 114.25, but 114 is more realistic and makes the sliders nicerc
+	public static double SWITCH_HANDLE_LENGTH = 114; // actually 114.25, but 114 is more realistic and makes the sliders nicer
 
 	public static double ROBOT_MAX_WEIGHT = 120;
 }
