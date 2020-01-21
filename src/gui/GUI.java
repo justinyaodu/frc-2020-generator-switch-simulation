@@ -119,6 +119,7 @@ public class GUI extends Application
     private Node[] buildRobot(int index)
     {
         Color[] colors = new Color[]{Color.BLACK, Color.RED, Color.GREEN, Color.BLUE};
+        Color color = colors[index % colors.length];
 
         PointMassOnSwitch robot = simulation.getPointMasses().get(index);
 
@@ -136,36 +137,45 @@ public class GUI extends Application
         // draw a vertical line with length proportional to robot weight
         Line line = new Line();
         line.setStroke(colors[index]);
+        line.setStrokeWidth(2);
         line.endYProperty().bind(robot.massProperty());
         robotGroup.getChildren().add(line);
 
-        StringExpression tolerances = Bindings.format("+%.1f -%.1f",
+        StringExpression tolerances = Bindings.format("%+.1f %+.1f",
                 levelXMax.subtract(robot.getSwitchRelativePosition().xProperty()),
-                robot.getSwitchRelativePosition().xProperty().subtract(levelXMin));
+                levelXMin.subtract(robot.getSwitchRelativePosition().xProperty()));
+
+        StringExpression ideal = Bindings.format("%.1f (%+.1f)", levelXZero,
+                levelXZero.subtract(robot.getSwitchRelativePosition().xProperty()));
+
+        PointMassOnSwitch idealPosition = new PointMassOnSwitch(0, 0, 0, simulation.equilibriumAngleProperty());
+        idealPosition.getSwitchRelativePosition().xProperty().bind(levelXZero);
+        idealPosition.getSwitchRelativePosition().yProperty().bind(robot.getSwitchRelativePosition().yProperty().subtract(index));
+        Circle idealIndicator = new Circle(3, color);
+        bindNodePosition(idealIndicator, idealPosition.getPosition());
 
         PointMassOnSwitch minEndpoint = new PointMassOnSwitch(0, 0, 0, simulation.equilibriumAngleProperty());
         minEndpoint.getSwitchRelativePosition().xProperty().bind(levelXMin);
-        minEndpoint.getSwitchRelativePosition().yProperty().bind(robot.getSwitchRelativePosition().yProperty().subtract(1));
-        Line toleranceMin = buildBoundLine(robot.getPosition().xProperty(), robot.getPosition().yProperty(),
-                minEndpoint.getPosition().xProperty(), minEndpoint.getPosition().yProperty(),
-                colors[index % colors.length]);
+        minEndpoint.getSwitchRelativePosition().yProperty().bind(idealPosition.getSwitchRelativePosition().yProperty());
 
         PointMassOnSwitch maxEndpoint = new PointMassOnSwitch(0, 0, 0, simulation.equilibriumAngleProperty());
         maxEndpoint.getSwitchRelativePosition().xProperty().bind(levelXMax);
-        maxEndpoint.getSwitchRelativePosition().yProperty().bind(robot.getSwitchRelativePosition().yProperty().subtract(1));
-        Line toleranceMax = buildBoundLine(robot.getPosition().xProperty(), robot.getPosition().yProperty(),
-                maxEndpoint.getPosition().xProperty(), maxEndpoint.getPosition().yProperty(),
-                colors[index % colors.length]);
+        maxEndpoint.getSwitchRelativePosition().yProperty().bind(idealPosition.getSwitchRelativePosition().yProperty());
 
-        toleranceMin.visibleProperty().bind(robotGroup.visibleProperty());
-        toleranceMax.visibleProperty().bind(robotGroup.visibleProperty());
+        Line tolerance = buildBoundLine(minEndpoint.getPosition().xProperty(), minEndpoint.getPosition().yProperty(),
+                maxEndpoint.getPosition().xProperty(), maxEndpoint.getPosition().yProperty(), color.interpolate(Color.TRANSPARENT, 0.5));
+        tolerance.setStrokeWidth(2);
+
+        // hide tolerance line if robot is hidden
+        tolerance.visibleProperty().bind(robotGroup.visibleProperty());
 
         Text label = new Text();
-        label.textProperty().bind(Bindings.format("%.1f in%s\n%.1f lbs\n%.1f in-lbs", robot.getSwitchRelativePosition().xProperty(), tolerances, robot.massProperty(), robot.torqueProperty()));
+        label.textProperty().bind(Bindings.format("\nx: %.1f in\nx tol.: %s\nx ideal: %s\nweight: %.1f lbs\nmoment arm: %.1f in\ntorque: %.1f in-lbs",
+                robot.getSwitchRelativePosition().xProperty(), tolerances, ideal, robot.massProperty(), robot.getPosition().xProperty(), robot.torqueProperty()));
         label.layoutYProperty().bind(line.endYProperty());
         robotGroup.getChildren().add(label);
 
-        return new Node[]{robotGroup, toleranceMin, toleranceMax};
+        return new Node[]{robotGroup, idealIndicator, tolerance};
     }
 
     private Line buildBoundLine(ObservableDoubleValue startX, ObservableDoubleValue startY, ObservableDoubleValue endX, ObservableDoubleValue endY, Color color)

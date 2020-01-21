@@ -1,5 +1,6 @@
 package simulation;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.DoubleBinding;
 import javafx.beans.property.DoubleProperty;
@@ -110,25 +111,7 @@ public class SwitchSimulation
 
         DoubleBinding theoretical = numeratorLeft.subtract(numeratorRight).divide(pointMasses.get(index).massProperty());
 
-        return new DoubleBinding()
-        {
-            {
-                super.bind(theoretical);
-            }
-
-            @Override
-            protected double computeValue()
-            {
-                // return NaN if off the handle or infinite
-                if (!Double.isFinite(theoretical.get())
-                        || Math.abs(theoretical.get()) > Constants.SWITCH_HANDLE_LENGTH / 2)
-                {
-                    return Double.NaN;
-                }
-
-                return theoretical.get();
-            }
-        };
+        return Bindings.max(-Constants.SWITCH_HANDLE_LENGTH / 2, Bindings.min(Constants.SWITCH_HANDLE_LENGTH / 2, theoretical));
     }
 
     public List<PointMassOnSwitch> getPointMasses()
