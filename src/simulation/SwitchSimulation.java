@@ -1,6 +1,5 @@
 package simulation;
 
-import com.sun.javafx.collections.ObservableListWrapper;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.DoubleBinding;
 import javafx.beans.property.DoubleProperty;
@@ -12,153 +11,163 @@ import java.util.List;
 
 public class SwitchSimulation
 {
-	public final DoubleProperty SWITCH_ANGLE = new SimpleDoubleProperty(0);
-	public final DoubleProperty SOLVE_PRECISION = new SimpleDoubleProperty(1e-6);
-	public final ObservableList<Double> TOLERANCES_MINUS = new ObservableListWrapper<>(new ArrayList<>());
-	public final ObservableList<Double> TOLERANCES_PLUS = new ObservableListWrapper<>(new ArrayList<>());
-	public DoubleBinding NET_TORQUE;
-	public DoubleBinding COM_X = new SimpleDoubleProperty(0).add(0);
-	public DoubleBinding COM_Y = new SimpleDoubleProperty(0).add(0);
-	private DoubleBinding TOTAL_MASS = new SimpleDoubleProperty(0).add(0);
+    private DoubleProperty solvePrecision = new SimpleDoubleProperty(1e-6);
+    private DoubleBinding comX = new SimpleDoubleProperty(0).add(0);
+    private DoubleBinding comY = new SimpleDoubleProperty(0).add(0);
+    private DoubleBinding totalMass = new SimpleDoubleProperty(0).add(0);
+    private DoubleProperty equilibriumAngle = new SimpleDoubleProperty(0);
+    private BooleanBinding isLevel;
+    private List<DoubleBinding> levelXMin = new ArrayList<>();
+    private List<DoubleBinding> levelXZero = new ArrayList<>();
+    private List<DoubleBinding> levelXMax = new ArrayList<>();
 
-	public final BooleanBinding IS_LEVEL = new BooleanBinding()
-	{
-		{
-			super.bind(SWITCH_ANGLE);
-		}
+    private List<PointMassOnSwitch> pointMasses = new ArrayList<>();
 
-		@Override
-		protected boolean computeValue()
-		{
-			return Math.abs(SWITCH_ANGLE.getValue()) <= Constants.SWITCH_BALANCED_ANGLE;
-		}
-	};
+    // indicator variable to prevent erroneous listener firing when properties are changed during threshold calculation
+    private boolean temporarilyDisableListeners = false;
 
-	public final List<PointMassOnSwitch> MASSES;
+    public SwitchSimulation()
+    {
+        PointMassOnSwitch switchMass = new PointMassOnSwitch(0, -Constants.SWITCH_COM_PIVOT_DISTANCE, Constants.SWITCH_WEIGHT, equilibriumAngle);
+        pointMasses.add(switchMass);
 
-	// indicator variable to prevent erroneous listener firing when properties are changed during threshold calculation
-	private boolean temporarilyDisableListeners = false;
+        for (int i = 0; i < 3; i++)
+        {
+            PointMassOnSwitch robot = new PointMassOnSwitch(0, -Constants.SWITCH_RUNG_PIVOT_DISTANCE, 0, equilibriumAngle);
+            pointMasses.add(robot);
+        }
 
-	public SwitchSimulation()
-	{
-		MASSES = new ArrayList<>();
-		PointMassOnSwitch switchMass = new PointMassOnSwitch(0, -Constants.SWITCH_COM_PIVOT_DISTANCE, Constants.SWITCH_WEIGHT, SWITCH_ANGLE);
-		addMass(switchMass);
+        // create bindings for COM
+        for (PointMassOnSwitch pointMass : pointMasses)
+        {
+            totalMass = totalMass.add(pointMass.massProperty());
+            comX = comX.add(pointMass.massProperty().multiply(pointMass.getSwitchRelativePosition().xProperty()));
+            comY = comY.add(pointMass.massProperty().multiply(pointMass.getSwitchRelativePosition().yProperty()));
+        }
+        comX = comX.divide(totalMass);
+        comY = comY.divide(totalMass);
 
-		NET_TORQUE = switchMass.TORQUE;
+        equilibriumAngle.bind(new DoubleBinding()
+        {
+            {
+                super.bind(comX, comY);
+            }
 
-		for (int i = 0; i < 3; i++)
-		{
-			PointMassOnSwitch robot = new PointMassOnSwitch(0, -Constants.SWITCH_RUNG_PIVOT_DISTANCE, 0, SWITCH_ANGLE);
-			addMass(robot);
+            @Override
+            protected double computeValue()
+            {
+                double angle = Math.atan(comX.get() / comY.get());
+                angle = Math.max(-Constants.SWITCH_MAX_ANGLE, Math.min(Constants.SWITCH_MAX_ANGLE, angle));
+                return angle;
+            }
+        });
 
-			// recalculate state whenever robot position or mass are changed
-			robot.SWITCH_RELATIVE_POSITION.X.addListener(observable -> recalculate());
-			robot.SWITCH_RELATIVE_POSITION.Y.addListener(observable -> recalculate());
-			robot.MASS.addListener(observable -> recalculate());
+        isLevel = new BooleanBinding()
+        {
+            {
+                super.bind(equilibriumAngle);
+            }
 
-			NET_TORQUE = NET_TORQUE.add(robot.TORQUE);
-		}
+            @Override
+            protected boolean computeValue()
+            {
+                return Math.abs(equilibriumAngle.getValue()) <= Constants.SWITCH_LEVEL_THRESHOLD;
+            }
+        };
 
-		COM_X = COM_X.divide(TOTAL_MASS);
-		COM_Y = COM_Y.divide(TOTAL_MASS);
-	}
+        for (int i = 0; i < pointMasses.size(); i++)
+        {
+            levelXMin.add(findMassPositionByAngle(i, Constants.SWITCH_LEVEL_THRESHOLD));
+            levelXZero.add(findMassPositionByAngle(i, 0));
+            levelXMax.add(findMassPositionByAngle(i, -Constants.SWITCH_LEVEL_THRESHOLD));
+        }
+    }
 
-	private void addMass(PointMassOnSwitch pointMass)
-	{
-		MASSES.add(pointMass);
-		COM_X = COM_X.add(pointMass.MASS.multiply(pointMass.POSITION.X));
-		COM_Y = COM_Y.add(pointMass.MASS.multiply(pointMass.POSITION.Y));
-		TOTAL_MASS = TOTAL_MASS.add(pointMass.MASS);
-	}
+    private DoubleBinding findMassPositionByAngle(int index, double angle)
+    {
+        DoubleBinding numeratorLeft = new SimpleDoubleProperty(0).add(0);
+        for (PointMassOnSwitch pointMass : pointMasses)
+        {
+            numeratorLeft = numeratorLeft.add(pointMass.massProperty()
+                    .multiply(pointMass.getSwitchRelativePosition().yProperty()));
+        }
+        numeratorLeft = numeratorLeft.multiply(Math.tan(angle));
 
-	private void findEquilibrium()
-	{
-		double angle = Math.atan2(COM_X.get(), COM_Y.get());
-		angle = Math.max(-Constants.SWITCH_MAX_ANGLE, Math.min(Constants.SWITCH_MAX_ANGLE, angle));
-		SWITCH_ANGLE.set(angle);
-	}
+        DoubleBinding numeratorRight = new SimpleDoubleProperty(0).add(0);
+        for (int i = 0; i < pointMasses.size(); i++)
+        {
+            // skip the object we are trying to solve for
+            if (i == index)
+            {
+                continue;
+            }
 
-	private void recalculate()
-	{
-		// prevent this method from recursively calling itself through listener events
-		if (!temporarilyDisableListeners)
-		{
-			temporarilyDisableListeners = true;
-		}
-		else
-		{
-			return;
-		}
+            PointMassOnSwitch pointMass = pointMasses.get(i);
 
-		// clear previously calculated values
-		TOLERANCES_MINUS.clear();
-		TOLERANCES_PLUS.clear();
+            numeratorRight = numeratorRight.add(pointMass.massProperty()
+                    .multiply(pointMass.getSwitchRelativePosition().xProperty()));
+        }
 
-		findEquilibrium();
+        DoubleBinding theoretical = numeratorLeft.subtract(numeratorRight).divide(pointMasses.get(index).massProperty());
 
-		// don't compute tolerances if the switch isn't level to begin with
-		if (!IS_LEVEL.get())
-		{
-			temporarilyDisableListeners = false;
-			return;
-		}
+        return new DoubleBinding()
+        {
+            {
+                super.bind(theoretical);
+            }
 
-		for (int i = 1; i < MASSES.size(); i++)
-		{
-			PointMassOnSwitch pointMass = MASSES.get(i);
+            @Override
+            protected double computeValue()
+            {
+                // return NaN if off the handle or infinite
+                if (!Double.isFinite(theoretical.get())
+                        || Math.abs(theoretical.get()) > Constants.SWITCH_HANDLE_LENGTH / 2)
+                {
+                    return Double.NaN;
+                }
 
-			double original = pointMass.SWITCH_RELATIVE_POSITION.X.get();
+                return theoretical.get();
+            }
+        };
+    }
 
-			// find minimum
-			double min = -Constants.SWITCH_HANDLE_LENGTH / 2;
-			double max = original;
+    public List<PointMassOnSwitch> getPointMasses()
+    {
+        return pointMasses;
+    }
 
-			while (max - min > SOLVE_PRECISION.get())
-			{
-				pointMass.SWITCH_RELATIVE_POSITION.X.set((min + max) / 2);
-				findEquilibrium();
+    public List<DoubleBinding> getLevelXMin()
+    {
+        return levelXMin;
+    }
 
-				if (IS_LEVEL.get())
-				{
-					max = pointMass.SWITCH_RELATIVE_POSITION.X.get();
-				}
-				else
-				{
-					min = pointMass.SWITCH_RELATIVE_POSITION.X.get();
-				}
-			}
+    public List<DoubleBinding> getLevelXZero()
+    {
+        return levelXZero;
+    }
 
-			TOLERANCES_MINUS.add(original - pointMass.SWITCH_RELATIVE_POSITION.X.get());
+    public List<DoubleBinding> getLevelXMax()
+    {
+        return levelXMax;
+    }
 
-			// find maximum
-			min = original;
-			max = Constants.SWITCH_HANDLE_LENGTH / 2;
+    public DoubleBinding comXProperty()
+    {
+        return comX;
+    }
 
-			while (max - min > SOLVE_PRECISION.get())
-			{
-				pointMass.SWITCH_RELATIVE_POSITION.X.set((min + max) / 2);
-				findEquilibrium();
+    public DoubleBinding comYProperty()
+    {
+        return comY;
+    }
 
-				if (IS_LEVEL.get())
-				{
-					min = pointMass.SWITCH_RELATIVE_POSITION.X.get();
-				}
-				else
-				{
-					max = pointMass.SWITCH_RELATIVE_POSITION.X.get();
-				}
-			}
+    public DoubleProperty equilibriumAngleProperty()
+    {
+        return equilibriumAngle;
+    }
 
-			TOLERANCES_PLUS.add(pointMass.SWITCH_RELATIVE_POSITION.X.get() - original);
-
-			// restore original value
-			pointMass.SWITCH_RELATIVE_POSITION.X.set(original);
-		}
-
-		// final reset
-		findEquilibrium();
-
-		temporarilyDisableListeners = false;
-	}
+    public BooleanBinding isLevelProperty()
+    {
+        return isLevel;
+    }
 }
