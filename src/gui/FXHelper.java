@@ -52,11 +52,4 @@ class FXHelper
         }
         return slider;
     }
-
-    static void sliderTicks(Slider slider, double majorTickUnit, int minorTickCount)
-    {
-        slider.setShowTickMarks(true);
-        slider.setMajorTickUnit(majorTickUnit);
-        slider.setMinorTickCount(minorTickCount);
-    }
 }

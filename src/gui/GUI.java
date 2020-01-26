@@ -67,13 +67,11 @@ public class GUI extends Application
 
             Slider positionSlider = buildSlider(-Constants.SWITCH_HANDLE_LENGTH / 2, Constants.SWITCH_HANDLE_LENGTH / 2,
                     0, pointMass.getSwitchRelativePosition().xProperty());
-            //sliderTicks(positionSlider, 6, 0);
             DoubleInput positionInput = new DoubleInput(pointMass.getSwitchRelativePosition().xProperty());
             controls.addRow(row++, new Text("Position along handle (in)"), positionSlider, positionInput);
 
 
             Slider massSlider = buildSlider(0, Constants.ROBOT_MAX_WEIGHT, 100, pointMass.massProperty());
-            //sliderTicks(massSlider, 10, 4);
             DoubleInput massInput = new DoubleInput(pointMass.massProperty());
             controls.addRow(row++, new Text("Robot weight (lbs)"), massSlider, massInput);
 
